@@ -1,0 +1,19 @@
+# .gitignore
+
+# Environments
+venv_backend/
+node_modules/
+
+# IDE folders
+.idea/
+.vscode/
+
+# Sensitive files
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Build artifacts (React)
+frontend/build/
