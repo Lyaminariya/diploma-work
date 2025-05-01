@@ -12,7 +12,7 @@ class Player(models.Model):
 class Match(models.Model):
     game_match_id = models.CharField(max_length=100, unique=True, null=True, blank=True, db_index=True)
     match_timestamp = models.DateTimeField(db_index=True, help_text="Дата и время начала игры")
-    duration_secons = models.PositiveIntegerField(null=True, blank=True)
+    duration_seconds = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
         ordering = ['-match_timestamp']
