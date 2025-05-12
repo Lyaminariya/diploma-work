@@ -4,8 +4,8 @@ from .views import PlayerViewSet
 
 
 router = DefaultRouter()
-router.register(r'players', PlayerViewSet, basename='player')
+router.register(r"players", PlayerViewSet, basename="player")
 
 urlpatterns = [
-    path('', include(router.urls))
+    path("", include(router.urls))
 ]
