@@ -1,0 +1,119 @@
+.pageContainer {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.pageTitle {
+    text-align: center;
+    color: #333;
+    margin-bottom: 20px;
+}
+
+.uploadForm .formGroup {
+    margin-bottom: 20px;
+}
+
+.uploadForm .textInput {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.uploadForm label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #555;
+}
+
+.uploadForm input[type="file"],
+.uploadForm select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.fileName {
+    font-size: 0.9em;
+    color: #777;
+    margin-top: 5px;
+}
+
+.infoText {
+    font-size: 0.9em;
+    color: #666;
+    line-height: 1.5;
+    margin-bottom: 20px;
+    padding: 10px;
+    background-color: #eef;
+    border-left: 3px solid #66f;
+}
+
+.submitButton {
+    display: block;
+    width: 100%;
+    padding: 12px 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.3s ease;
+}
+
+.submitButton:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+}
+
+.submitButton:not(:disabled):hover {
+    background-color: #0056b3;
+}
+
+.successMessage {
+    color: green;
+    background-color: #e6ffed;
+    border: 1px solid #b2f0c1;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.errorMessage {
+    color: red;
+    background-color: #ffebee;
+    border: 1px solid #ffcdd2;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.detailedErrors {
+    background-color: #fff3e0;
+    border: 1px solid #ffe0b2;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+.detailedErrors h4 {
+    margin-top: 0;
+    color: #e65100;
+}
+.detailedErrors ul {
+    padding-left: 20px;
+    font-size: 0.9em;
+}
+.detailedErrors li {
+    margin-bottom: 5px;
+}
