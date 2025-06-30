@@ -9,8 +9,7 @@ from django.core.management.base import BaseCommand
 
 from dotenv import load_dotenv
 
-from stats_api.models import Player, Match, PlayerMatchStats
-
+from stats_api.models import Player, Match, PlayerMatchStats, GameNames
 
 load_dotenv()
 
@@ -35,30 +34,8 @@ HEADERS = {
     "accept": "application/json"
 }
 
-RANK_TIERS = {
-    "IRON": list(range(3, 6)),
-    "BRONZE": list(range(6, 9)),
-    "SILVER": list(range(9, 12)),
-    "GOLD": list(range(12, 15)),
-    "PLATINUM": list(range(15, 18)),
-    "DIAMOND": list(range(18, 21)),
-    "ASCENDANT": list(range(21, 24)),
-    "IMMORTAL": list(range(24, 27)),
-    "RADIANT": [27],
-}
-
-def get_rank_name(tier):
-    """Получает ранг из числа ранга"""
-    if not isinstance(tier, int):
-        return "UNKNOWN"
-
-    for name, tiers in RANK_TIERS.items():
-        if tier in tiers:
-            return name
-
-    if tier < 3:
-        return "UNRANKED"
-    return "UNKNOWN"
+KNOWN_RANK_TIERS_NAMES = ["UNRANKED", "IRON", "BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "ASCENDANT",
+                                  "IMMORTAL", "RADIANT"]
 
 def make_api_request(url):
     """Запрос к API с обработкой ошибок и лимитов"""
@@ -68,7 +45,7 @@ def make_api_request(url):
         response = requests.get(url, headers=HEADERS)
 
         if response.status_code == 429:
-            retry_after = int(response.headers.get("Retry-After", 5)) # Получаем время ожидания из заголовка
+            retry_after = int(response.headers.get("Retry-After", 5))  # Получаем время ожидания из заголовка
             logger.warning(f"Превышен лимит запросов. Ожидаем {retry_after} секунд")
             time.sleep(retry_after)
 
@@ -100,6 +77,7 @@ def make_api_request(url):
         logger.error(f"Неожиданная ошибка при запросе к API {url}: {e}")
         return None
 
+
 def get_account_details(name, tag):
     """Получает данные аккаунта по Riot ID"""
     url = f"{API_BASE_URL}/valorant/v1/account/{name}/{tag}"
@@ -108,20 +86,10 @@ def get_account_details(name, tag):
         return data["data"]
     return None
 
-# def get_player_mmr_by_puuid(region, puuid):
-#     """Получает текущий ранг игрока по PUUID и региону"""
-#     url = f'/valorant/v3/mmr/by-puuid/{region}/{puuid}'
-#     data = make_api_request(url)
-#     if data and data.get('status') == 200 and isinstance(data.get('data'), dict):
-#         mmr_data = data['data']
-#         current_tier = (mmr_data.get('current_data', {}).get or mmr_data.get('currenttier'))
-#         rank_name = get_rank_name(current_tier)
-#         return rank_name, current_tier
-#     return 'UNKNOWN', None
-
 def get_matches_by_puuid(region, puuid, platform="pc", count=20):
     """Получает список последних матчей игрока"""
-    logger.info(f"Формирование URL для get_matches_by_puuid (v4): region={region}, puuid={puuid}, platform={platform}, mode=competitive, count={count}")
+    logger.info(
+        f"Формирование URL для get_matches_by_puuid (v4): region={region}, puuid={puuid}, platform={platform}, mode=competitive, count={count}")
 
     url = f"{API_BASE_URL}/valorant/v4/by-puuid/matches/{region}/{platform}/{puuid}?mode=competitive&size={count}"
     logger.info(f"Сформированный URL: {url}")
@@ -132,6 +100,7 @@ def get_matches_by_puuid(region, puuid, platform="pc", count=20):
     logger.warning(f"Не удалось получить историю матчей для PUUID {puuid} в регионе {region}. Ответ: {data}")
     return []
 
+
 def get_match_details(match_id):
     """Получает детальную информацию о матче"""
     url = f"{API_BASE_URL}/valorant/v2/match/{match_id}"
@@ -140,35 +109,41 @@ def get_match_details(match_id):
         return data["data"]
     return None
 
+
 class Command(BaseCommand):
     help = "Загружает данные о матчах Valorant из API и сохраняет их в БД"
 
     def add_arguments(self, parser):
-        parser.add_argument("--players_per_rank", type=int, default=5, help="Сколько игроков каждого ранга пытаться найти")
-        parser.add_argument("--matches_per_player", type=int, default=5, help="Сколько последних матчей для игрока пытаться загружать")
+        parser.add_argument("--players_per_rank", type=int, default=5,
+                            help="Сколько игроков каждого ранга пытаться найти")
+        parser.add_argument("--matches_per_player", type=int, default=5,
+                            help="Сколько последних матчей для игрока пытаться загружать")
         parser.add_argument("--start_name", type=str, required=True, help="Имя игрока (без тэга) для начала поиска")
         parser.add_argument("--start_tag", type=str, required=True, help="Тэг игрока (без #) для начала поиска")
-        parser.add_argument("--target_ranks", nargs="+", default=["GOLD", "PLATINUM", "DIAMOND"], help="Список рангов для поиска")
+        parser.add_argument("--target_ranks", nargs="+", default=["GOLD", "PLATINUM", "DIAMOND"],
+                            help="Список рангов для поиска")
 
     def handle(self, *args, **options):
         players_per_rank = options["players_per_rank"]
         matches_per_player = options["matches_per_player"]
+        target_ranks_input = [rank.upper() for rank in options["target_ranks"]]
         start_name = options["start_name"]
         start_tag = options["start_tag"]
-        target_ranks_input = [rank.upper() for rank in options["target_ranks"]]
         platform = "pc"
 
-        logger.info(f"Начало загрузки данных. Цель: {players_per_rank} игроков для рангов {target_ranks_input}, по {matches_per_player} матчей")
+        logger.info(
+            f"Начало загрузки данных. Цель: {players_per_rank} игроков для рангов {target_ranks_input}, по {matches_per_player} матчей")
         logger.info(f"Стартовый игрок: {start_name}#{start_tag}")
 
-        target_ranks = {rank_name: players_per_rank for rank_name in target_ranks_input if rank_name in RANK_TIERS}
+        target_ranks = {rank_name: players_per_rank for rank_name in target_ranks_input if rank_name in KNOWN_RANK_TIERS_NAMES}
         if not target_ranks:
-            logger.error(f"Не указано ни одного корректного ранга. Завершение")
+            logger.error(f"Не указано ни одного корректного ранга. Доступные: {KNOWN_RANK_TIERS_NAMES}. Завершение")
             return
 
         start_account_data = get_account_details(start_name, start_tag)
         if not start_account_data or "puuid" not in start_account_data or "region" not in start_account_data:
-            logger.error(f"Не удалось получить PUUID или регион для стартового игрока {start_name}#{start_tag}. Проверьте Riot ID и регион")
+            logger.error(
+                f"Не удалось получить PUUID или регион для стартового игрока {start_name}#{start_tag}. Проверьте Riot ID и регион")
             return
 
         start_puuid = start_account_data["puuid"]
@@ -190,7 +165,8 @@ class Command(BaseCommand):
         while puuids_to_process and iterations < max_iterations:
             iterations += 1
 
-            all_filled = all(len(found_players_by_rank.get(rank, set())) >= count for rank, count in target_ranks.items())
+            all_filled = all(
+                len(found_players_by_rank.get(rank, set())) >= count for rank, count in target_ranks.items())
             if all_filled:
                 logger.info("Найдено достаточно игроков")
                 break
@@ -223,12 +199,15 @@ class Command(BaseCommand):
                         continue
 
                     # Получаем ранг игрока в этом матче
-                    participant_rank_tier = player_data.get("currenttier_patched", {})
+                    participant_rank_tier = player_data.get("currenttier_patched", "Unranked")
                     participant_rank_name = participant_rank_tier.split()[0].upper()
 
-                    logger.info(f"Игрок: {player_data.get('name')}#{player_data.get('tag')}, Ранг: {participant_rank_tier}, Имя ранга: {participant_rank_name}")
+                    logger.info(
+                        f"Игрок: {player_data.get('name')}#{player_data.get('tag')}, Ранг: {participant_rank_tier}, Имя ранга: {participant_rank_name}")
 
-                    if participant_rank_name in target_ranks and len(found_players_by_rank.get(participant_rank_name, set())) < target_ranks[participant_rank_name]:
+                    if participant_rank_name in target_ranks and len(
+                            found_players_by_rank.get(participant_rank_name, set())) < target_ranks[
+                        participant_rank_name]:
                         if participant_puuid not in found_players_by_rank[participant_rank_name]:
                             found_players_by_rank[participant_rank_name].add(participant_puuid)
                             player_region_map[participant_puuid] = match_region
@@ -309,6 +288,7 @@ class Command(BaseCommand):
                 is_ranked_flag = metadata.get("mode_id", {}) == "competitive"
 
                 match_obj, match_created = Match.objects.update_or_create(
+                    game_name=GameNames.VALORANT,
                     game_match_id=match_id,
                     defaults={
                         "match_timestamp": match_datetime_str,
@@ -354,7 +334,7 @@ class Command(BaseCommand):
                         if weapon_data and weapon_data.get("name"):
                             weapon_name = weapon_data["name"]
 
-                            # Исключаем стартовое оружие (Classic, Knife и т.д.)
+                            # Исключаем стартовое оружие
                             if weapon_name.lower() not in ["classic", "knife"]:
                                 weapon_usage_by_puuid[puuid].append(weapon_name)
 
@@ -368,13 +348,20 @@ class Command(BaseCommand):
                     if not participant_puuid or len(participant_puuid) < 10:
                         continue
 
+                    if participant_puuid not in final_puuids_to_load:
+                        logger.debug(f"Пропуск статистики для игрока {player_data.get('name')}#{player_data.get('tag')} (PUUID: {participant_puuid})")
+                        continue
+
+                    logger.info(f"Сбор статистики для игрока: {player_data.get('name')}#{player_data.get('tag')} (PUUID: {participant_puuid}) в матче {match_id}")
+
                     p_name = player_data.get("name", f"Игрок_{participant_puuid}")
                     p_tag = player_data.get("tag", f"EUW")
-                    p_rank = player_data.get("currenttier", 0)
+                    p_rank = player_data.get("currenttier_patched", "Unranked")
                     p_username = f"{p_name}#{p_tag}"
                     p_team = player_data.get("team")
 
                     participant_obj, p_created = Player.objects.update_or_create(
+                        game_name=GameNames.VALORANT,
                         puuid=participant_puuid,
                         defaults={
                             "username": p_username,
@@ -402,6 +389,8 @@ class Command(BaseCommand):
                     else:
                         kda = round((kills + assists) / deaths, 2)
 
+                    damage_dealt = player_data.get("damage_made", 0)
+
                     ability_casts = player_data.get("ability_casts", {}) or {}
                     skills_used = (ability_casts.get("q_cast", 0) +
                                    ability_casts.get("e_cast", 0) +
@@ -412,7 +401,7 @@ class Command(BaseCommand):
                     bodyshots = stats.get("bodyshots", 0)
                     legshots = stats.get("legshots", 0)
                     total_shots_hitted = headshots + bodyshots + legshots
-                    headshot_rate = round(headshots / total_shots_hitted, 2)
+                    headshot_rate = round(headshots / total_shots_hitted) * 100
 
                     bomb_plants = plants_by_puuid.get(participant_puuid, 0)
                     bomb_defuses = defuses_by_puuid.get(participant_puuid, 0)
@@ -429,6 +418,7 @@ class Command(BaseCommand):
                                 favorite_weapon_name = most_common[1][0]
 
                     stats_obj, stat_created = PlayerMatchStats.objects.update_or_create(
+                        game_name=GameNames.VALORANT,
                         player=participant_obj,
                         match=match_obj,
                         defaults={
@@ -437,6 +427,7 @@ class Command(BaseCommand):
                             "deaths": deaths,
                             "kda": kda,
                             "assists": assists,
+                            "damage_dealt": damage_dealt,
                             "skills_used": skills_used,
                             "ultimates_used": ultimates_used,
                             "bomb_plants": bomb_plants,
@@ -458,4 +449,5 @@ class Command(BaseCommand):
 
             logger.info(f"Обработка игрока {puuid} завершена")
 
-        logger.info(f"Загрузка данных полностью завершена. Всего уникальных матчей обработано/обновлено в этой сессии: {len(processed_match_ids)}")
+        logger.info(
+            f"Загрузка данных полностью завершена. Всего уникальных матчей обработано/обновлено в этой сессии: {len(processed_match_ids)}")
