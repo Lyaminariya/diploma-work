@@ -6,7 +6,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 import django_filters.rest_framework
 
 from django.db import transaction, IntegrityError
-from django.db.models import Sum, Count, Q, Avg, F, Value, FloatField, CharField, Field
+from django.db.models import Sum, Count, Q, Avg, F, Value, FloatField, CharField, Field, Case, When, IntegerField, Min, Max
 from django.db.models.functions import Coalesce, Cast
 from django.utils.dateparse import parse_datetime
 
@@ -778,3 +778,131 @@ class DBSCANAnalysisView(views.APIView):
             "clustered_players": sorted_final_clustered_players,
             "scatter_plot_data": scatter_plot_data
         }, status=status.HTTP_200_OK)
+
+
+class PlayerComparisonView(views.APIView):
+    """API эндпоинт для сравнительного анализа игрока"""
+    permission_classes = []
+
+    def _calculate_player_avg_stats(self, player_stats_qs, game_name):
+        if not player_stats_qs.exists():
+            return None
+        metrics_to_agg = {
+            'avg_kills': Avg('kills'), 'avg_deaths': Avg('deaths'),
+            'avg_assists': Avg('assists'), 'avg_kda': Avg('kda'),
+            'avg_damage_dealt': Avg('damage_dealt'), 'avg_headshot_rate': Avg('headshot_rate')
+        }
+        if game_name == GameNames.VALORANT:
+            metrics_to_agg.update({'avg_skills_used': Avg('skills_used'), 'avg_ultimates_used': Avg('ultimates_used')})
+        elif game_name == GameNames.PUBG:
+            metrics_to_agg.update({'avg_boosts_used': Avg('boosts_used'), 'avg_heals_used': Avg('heals_used')})
+
+        aggregates = player_stats_qs.aggregate(**metrics_to_agg)
+        for key, value in aggregates.items():
+            if value is not None:
+                aggregates[key] = round(value, 2)
+        return aggregates
+
+    def _calculate_group_stats_boundaries(self, group_stats_qs, game_name):
+        if not group_stats_qs.exists():
+            return None
+        metrics_to_agg_expr = {
+            'kills': (Min('kills'), Max('kills'), Avg('kills')),
+            'deaths': (Min('deaths'), Max('deaths'), Avg('deaths')),
+            'assists': (Min('assists'), Max('assists'), Avg('assists')), 'kda': (Min('kda'), Max('kda'), Avg('kda')),
+            'damage_dealt': (Min('damage_dealt'), Max('damage_dealt'), Avg('damage_dealt')),
+            'headshot_rate': (Min('headshot_rate'), Max('headshot_rate'), Avg('headshot_rate')),
+        }
+        if game_name == GameNames.VALORANT:
+            metrics_to_agg_expr.update({
+                'skills_used': (Min('skills_used'), Max('skills_used'), Avg('skills_used')),
+                'ultimates_used': (Min('ultimates_used'), Max('ultimates_used'), Avg('ultimates_used')),
+            })
+        elif game_name == GameNames.PUBG:
+            metrics_to_agg_expr.update({
+                'boosts_used': (Min('boosts_used'), Max('boosts_used'), Avg('boosts_used')),
+                'heals_used': (Min('heals_used'), Max('heals_used'), Avg('heals_used')),
+            })
+        agg_kwargs = {f'{metric}_{func}': expression for metric, expressions in metrics_to_agg_expr.items() for
+                      func, expression in zip(['min', 'max', 'avg'], expressions)}
+        aggregated_results = group_stats_qs.aggregate(**agg_kwargs)
+        stats_boundaries = {}
+        for metric in metrics_to_agg_expr.keys():
+            stats_boundaries[f'avg_{metric}'] = {
+                'min': round(aggregated_results.get(f'{metric}_min', 0) or 0, 2),
+                'max': round(aggregated_results.get(f'{metric}_max', 0) or 0, 2),
+                'avg': round(aggregated_results.get(f'{metric}_avg', 0) or 0, 2),
+            }
+        return stats_boundaries
+
+    def get(self, request, *args, **kwargs):
+        game_name = request.query_params.get('game_name')
+        puuid = request.query_params.get('puuid')
+        username = request.query_params.get('username')
+        comparison_rank = request.query_params.get('comparison_rank')
+
+        if not game_name:
+            return Response({"error": "Параметр 'game_name' обязателен."}, status=status.HTTP_400_BAD_REQUEST)
+        if not puuid and not username:
+            return Response({"error": "Необходимо указать 'puuid' или 'username'."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            if puuid:
+                target_player = Player.objects.get(puuid__iexact=puuid, game_name=game_name)
+            else:
+                target_player = Player.objects.filter(username__iexact=username, game_name=game_name).first()
+
+            if not target_player:
+                raise Player.DoesNotExist
+
+        except Player.DoesNotExist:
+            return Response({"error": "Игрок не найден."}, status=status.HTTP_404_NOT_FOUND)
+
+        # считаем статистику игрока для сравнения
+        player_latest_stats_qs = PlayerMatchStats.objects.filter(
+            player=target_player
+        ).order_by('-match__match_timestamp')[:20]
+
+        target_player_avg_stats = self._calculate_player_avg_stats(player_latest_stats_qs, game_name)
+        if not target_player_avg_stats:
+            return Response({
+                "error": f"Для игрока {target_player.username} не найдено достаточно матчей для анализа."
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # считаем статистику для группы сравнения
+        comparison_group_boundaries = None
+        player_count_in_rank = 0
+        if comparison_rank:
+            players_in_rank = Player.objects.filter(
+                game_name=game_name,
+                rank=comparison_rank
+            ).exclude(id=target_player.id)
+
+            player_count_in_rank = players_in_rank.count()
+
+            if player_count_in_rank > 0:
+                comparison_stats_qs = PlayerMatchStats.objects.filter(player__in=players_in_rank)
+                comparison_group_boundaries = self._calculate_group_stats_boundaries(comparison_stats_qs, game_name)
+
+        # получаем список всех доступных рангов
+        available_ranks = list(Player.objects.filter(
+            game_name=game_name, rank__isnull=False
+        ).exclude(rank='').values_list('rank', flat=True).distinct().order_by('rank'))
+
+        response_data = {
+            "target_player": {
+                "id": target_player.id,
+                "username": target_player.username,
+                "rank": target_player.rank,
+                "stats": target_player_avg_stats,
+                "matches_analyzed": player_latest_stats_qs.count()
+            },
+            "comparison_group": {
+                "rank": comparison_rank,
+                "player_count": player_count_in_rank,
+                "stats_boundaries": comparison_group_boundaries
+            },
+            "available_ranks": available_ranks
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)

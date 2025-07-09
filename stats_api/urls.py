@@ -7,6 +7,7 @@ from .views import (
     DBSCANAnalysisView,
     CSVImportView,
     AvailableGamesView,
+    PlayerComparisonView,
 )
 
 router = DefaultRouter()
@@ -21,4 +22,5 @@ urlpatterns = [
     path('stats/dbscan-analysis/', DBSCANAnalysisView.as_view(), name='dbscan_analysis'),
     path('import-csv/', CSVImportView.as_view(), name='csv_import'),
     path('available-games/', AvailableGamesView.as_view(), name='available_games'),
+    path('stats/player-comparison/', PlayerComparisonView.as_view(), name='player_comparison'),
 ]

@@ -1,0 +1,109 @@
+.pageContainer {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+.pageTitle {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+.form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+.formGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.formGroup label {
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: #555;
+}
+.formGroup input, .formGroup select {
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+.submitButton {
+    align-self: flex-end;
+    padding: 10px 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.2s;
+}
+.submitButton:disabled {
+    background-color: #a0cffc;
+    cursor: not-allowed;
+}
+.submitButton:hover:not(:disabled) {
+    background-color: #0056b3;
+}
+.errorMessage {
+    color: #d9534f;
+    text-align: center;
+    font-size: 1.2rem;
+}
+.resultsContainer {
+    margin-top: 2rem;
+}
+.statsGrid {
+    display: grid;
+    grid-template-columns: 1fr 2fr 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+.statsCard {
+    background: #fff;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.statsCard h3 {
+    margin-top: 0;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+}
+.statsCard h3 span {
+    font-size: 0.9rem;
+    color: #777;
+    font-weight: normal;
+}
+.statsCard ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+}
+.statsCard li {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f5f5f5;
+}
+.statsCard li:last-child {
+    border-bottom: none;
+}
+.chartContainer {
+    padding: 1rem;
+    min-height: 400px;
+}
+@media (max-width: 992px) {
+    .statsGrid {
+        grid-template-columns: 1fr;
+    }
+}
